@@ -141,7 +141,7 @@ FROSTLAKE_URL=frostlake://localhost:18082 swift test
 FROSTLAKE_CLASSPATH="$(scripts/engine-classpath.sh)" swift test
 ```
 
-The integration suite is verified against engine 0.0.7 and 0.1.0-SNAPSHOT.
+The integration suite is verified against engine 0.0.7 and 0.1.0.
 
 ## License
 
