@@ -29,12 +29,17 @@ enum JSONText {
 
     /// `multiStatementCount` is left out of the body entirely when nil: a
     /// request without the field is the one the server has always been sent,
-    /// and the session's MULTI_STATEMENT_COUNT decides for it.
+    /// and the session's MULTI_STATEMENT_COUNT decides for it. So is
+    /// `requireSession` when false, and it is only ever sent with a session id.
     static func requestBody(sql: String, sessionId: String?, autoCommit: Bool,
-                            multiStatementCount: Int? = nil) -> Data {
+                            multiStatementCount: Int? = nil,
+                            requireSession: Bool = false) -> Data {
         var json = "{\"sql\":\"\(escape(sql))\",\"autoCommit\":\(autoCommit)"
         if let sessionId {
             json += ",\"sessionId\":\"\(escape(sessionId))\""
+            if requireSession {
+                json += ",\"requireSession\":true"
+            }
         }
         if let multiStatementCount {
             json += ",\"multiStatementCount\":\(multiStatementCount)"

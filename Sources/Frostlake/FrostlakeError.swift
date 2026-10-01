@@ -18,6 +18,14 @@ public enum FrostlakeError: Error, Sendable, Equatable, CustomStringConvertible 
     case binds(String)
     /// `execute` was called after `close`.
     case connectionClosed
+    /// The engine no longer held the connection's session (it expired, was
+    /// released, or the server restarted), and the statement did not run. A lost
+    /// session is replaced on its own when nothing went with it; this is thrown
+    /// when it held an open transaction or context set up on it (USE, SET, ALTER
+    /// SESSION, a temporary object), since re-running the statement would put it
+    /// somewhere its author did not intend. The connection stays usable: the next
+    /// statement starts a fresh session on the DSN's scope.
+    case sessionLost(String)
 
     public var description: String {
         switch self {
@@ -28,6 +36,7 @@ public enum FrostlakeError: Error, Sendable, Equatable, CustomStringConvertible 
         case .sql(let message): return message
         case .binds(let message): return message
         case .connectionClosed: return "connection is closed"
+        case .sessionLost(let message): return message
         }
     }
 }

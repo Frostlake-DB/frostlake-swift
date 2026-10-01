@@ -5,6 +5,10 @@ struct WireEnvelope: Sendable {
     let success: Bool
     let errorMessage: String?
     let sessionId: String?
+    /// Whether the statement ran in a session started for it. nil from a server
+    /// that predates the field — one that also ignores `requireSession` and has
+    /// no `DELETE /api/sessions/{id}`.
+    let newSession: Bool?
     let executionTimeMs: Int64
     let resultSets: [WireResultSet]
 
@@ -13,6 +17,7 @@ struct WireEnvelope: Sendable {
         success = fields["success"]?.boolOrNil ?? false
         errorMessage = fields["errorMessage"]?.stringOrNil
         sessionId = fields["sessionId"]?.stringOrNil
+        newSession = fields["newSession"]?.boolOrNil
         executionTimeMs = fields["executionTimeMs"]?.intOrNil ?? 0
         var sets: [WireResultSet] = []
         for entry in fields["resultSets"]?.arrayOrNil ?? [] {

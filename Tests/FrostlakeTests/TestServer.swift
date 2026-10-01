@@ -35,6 +35,7 @@ actor TestServer {
     private var cachedCountsStatements: Bool?
     private var cachedReportsColumnLength: Bool?
     private var cachedReportsUpdateCount: Bool?
+    private var cachedReportsNewSession: Bool?
 
     func hostPort() async throws -> String {
         if let cachedHostPort { return cachedHostPort }
@@ -143,6 +144,46 @@ actor TestServer {
         }
         cachedReportsUpdateCount = reports
         return reports
+    }
+
+    /// Whether the engine reports `newSession`, which arrived together with `requireSession` and
+    /// `DELETE /api/sessions/{id}`. Engines before 0.1.0 have none of the three, so the tests of
+    /// a lost or released session report as skipped against one of those rather than passed.
+    func reportsNewSession() async -> Bool {
+        if let cachedReportsNewSession { return cachedReportsNewSession }
+        var reports = false
+        do {
+            var request = URLRequest(url: URL(string: "http://\(try await hostPort())/api/execute")!)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = JSONText.requestBody(sql: "SELECT 1", sessionId: nil, autoCommit: true)
+            let (data, _) = try await URLSession.shared.data(for: request)
+            let envelope = WireEnvelope(root: try JSONParser.parse(data))
+            reports = envelope.newSession != nil
+            if reports, let probe = envelope.sessionId {
+                _ = try await releaseSession(probe)
+            }
+        } catch {
+            reports = false
+        }
+        cachedReportsNewSession = reports
+        return reports
+    }
+
+    /// Ends a session behind its connection's back, as an idle expiry would, and answers
+    /// the HTTP status.
+    func releaseSession(_ id: String) async throws -> Int {
+        var request = URLRequest(url: URL(string: "http://\(try await hostPort())/api/sessions/\(id)")!)
+        request.httpMethod = "DELETE"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        return (response as? HTTPURLResponse)?.statusCode ?? 0
+    }
+
+    /// How many sessions the engine holds, from `GET /api/sessions`.
+    func activeSessions() async throws -> Int64 {
+        let url = URL(string: "http://\(try await hostPort())/api/sessions")!
+        let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
+        return try JSONParser.parse(data).objectOrNil?["activeSessions"]?.intOrNil ?? -1
     }
 
     func dsn(database: String? = nil, schema: String? = nil) async throws -> String {

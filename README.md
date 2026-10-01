@@ -19,7 +19,7 @@ for row in result.rows {
 ## Requirements
 
 - Swift 6.0+ (Linux or macOS 13+)
-- A Frostlake engine ≥ 0.0.7 serving its HTTP API (`DatabaseHttpServer`)
+- A Frostlake engine ≥ 0.2.0 serving its HTTP API (`DatabaseHttpServer`)
 
 ## Installation
 
@@ -54,9 +54,10 @@ database.
 - `FrostlakeConnection` (an actor):
   - `execute(_ sql: String, _ binds: [FrostlakeBind] = [], multiStatementCount: Int? = nil)
     async throws -> FrostlakeResult`
-  - `begin()` / `commit()` / `rollback()` — `begin` turns autocommit off; commit/rollback turn it
-    back on
-  - `setAutoCommit(_:)`, `autoCommit`, `sessionId`, `isClosed`, `ping()`, `close()`
+  - `begin()` / `commit()` / `rollback()` — `begin` turns autocommit off once BEGIN has succeeded,
+    so a `begin` that throws leaves it on; commit/rollback turn it back on once they have succeeded
+  - `setAutoCommit(_:)`, `autoCommit`, `sessionId`, `isClosed`, `ping()`, `close()` (async: it
+    releases the engine session — see [Session lifetime](#session-lifetime))
 - `FrostlakeResult` — `resultSets` (one per statement; SQL holding several answers with several, once
   the session has asked for them with `ALTER SESSION SET MULTI_STATEMENT_COUNT = n`, or `0` for any
   number), with the first surfaced as `columns` / `rows` / `rowCount` / `updateCount`, plus
@@ -67,11 +68,45 @@ database.
   accessors (`intValue`, `decimalValue`, `doubleValue`, `boolValue`, `stringValue`, `binaryValue`,
   `dateValue`, `timestampValue`, `timeValue`).
 - `FrostlakeError` — `.invalidDSN`, `.transport`, `.unhealthy`, `.unreadableBody`, `.sql(message)`,
-  `.binds`, `.connectionClosed`.
+  `.binds`, `.connectionClosed`, `.sessionLost(message)`. `.sessionLost` is the newest case, so an
+  exhaustive `switch` over the enum needs it too.
 
 Statements are **serialized per connection**, in call order — the session id is only learned from
 the first response, so concurrent round trips would each get their own server session. Concurrent
 `execute` calls on one connection are safe; they queue.
+
+### Session lifetime
+
+The engine can lose a session: it expires one after 30 idle minutes, a `DELETE
+/api/sessions/{id}` releases one, and a restart ends them all. Against an engine from 0.1.0 on —
+one whose answers carry `newSession` — the connection keeps its session in step:
+
+- **What is sent.** Every request that names the session also sends `requireSession: true`, so an
+  engine that no longer holds the session refuses the request with HTTP 404 and runs nothing,
+  rather than quietly starting a fresh session at its default database and schema. The first
+  answer that names a session says whether the engine understands the flag: `newSession` present
+  means it does. An engine before 0.1.0 is never sent the flag.
+- **After a lost session.** The connection drops the session and decides from what the lost one
+  held.
+  - Nothing of the caller's own: the DSN's `USE DATABASE` / `USE SCHEMA` go onto a fresh session and
+    the statement is sent **once** more. A second refusal throws `.sessionLost`.
+  - An open transaction — from `begin()` or a `BEGIN` / `START TRANSACTION` statement until `COMMIT`
+    or `ROLLBACK`, or any statement run with autocommit off: `.sessionLost`, saying the transaction
+    is gone and the statement did not run.
+  - Context the caller set up — a `USE`, `SET` / `UNSET`, `ALTER SESSION`, a temporary object, or a
+    `CREATE` / `DROP` of a database or schema: `.sessionLost`, saying the context went with the
+    session and the statement was not re-run.
+
+  Either way the connection stays usable: the next statement starts a fresh session on the DSN's
+  scope. Autocommit stays as it was set — after a transaction `begin()` opened was lost, `rollback()`
+  turns it back on.
+- **What `close()` does.** It lets a statement already running finish, then sends `DELETE
+  /api/sessions/{id}`, which releases the session and rolls back a transaction left open on it. The
+  release is best effort: it waits five seconds at most, and a release the engine refuses or never
+  answers is not an error. Closing again sends nothing.
+
+Against an engine before 0.1.0 none of this applies: `close()` sends nothing, and the session
+lingers until the engine's own idle expiry.
 
 ### Statement counts per call
 
@@ -142,6 +177,11 @@ FROSTLAKE_CLASSPATH="$(scripts/engine-classpath.sh)" swift test
 ```
 
 The integration suite is verified against engine 0.0.7 and 0.1.0.
+
+`FL_CORPUS=/path/to/frostlake/engine/src/test/resources/testkit swift test` also replays the
+engine's language-neutral test corpus (its `suites/*.json`) through the driver, against the engine
+named as above; without `FL_CORPUS` that test is skipped, and a directory with no suites fails it.
+Give an absolute path — a relative one resolves against the test process's working directory.
 
 ## License
 

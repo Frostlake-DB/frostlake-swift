@@ -279,6 +279,32 @@ struct IntegrationTests {
         _ = try await conn.execute("DROP TABLE \(t)")
     }
 
+    /// A begin() that failed opened no transaction, so the writes after it are committed rather
+    /// than left in a transaction nobody commits. Here BEGIN fails before it is sent: the DSN's
+    /// database does not exist yet, so the USE queued ahead of it is refused.
+    @Test func writesAfterAFailedBeginAreCommitted() async throws {
+        let db = name("LATE_DB")
+        let conn = try await open(database: db)
+        do {
+            try await conn.begin()
+            Issue.record("expected begin() to fail on a database that does not exist")
+        } catch FrostlakeError.sql(let message) {
+            #expect(message.contains("does not exist"))
+        }
+        #expect(await conn.autoCommit)
+        let admin = try await open()
+        _ = try await admin.execute("CREATE OR REPLACE DATABASE \(db)")
+        _ = try await admin.execute("CREATE TABLE \(db).PUBLIC.T (I INT)")
+        // The queued USE goes through now, and the INSERT behind it runs in autocommit.
+        _ = try await conn.execute("INSERT INTO T VALUES (1)")
+        // Visible from another session, so it was committed.
+        let count = try await admin.execute("SELECT COUNT(*) AS C FROM \(db).PUBLIC.T")
+        #expect(count.rows.first?["C"] == .int(1))
+        await conn.close()
+        _ = try await admin.execute("DROP DATABASE \(db)")
+        await admin.close()
+    }
+
     @Test func concurrentExecutesShareOneSession() async throws {
         let conn = try await open()
         let db = name("CONC")
@@ -329,5 +355,55 @@ struct IntegrationTests {
         #expect(result.rows[0]["B"] == .binary(Data([0xDE, 0xAD, 0xBE, 0xEF])))
         let empty = try await conn.execute("SELECT TO_BINARY('', 'HEX') AS B")
         #expect(empty.rows[0]["B"] == .binary(Data()))
+    }
+
+    @Test(.enabled("engine cannot report a lost session", { await TestServer.shared.reportsNewSession() }))
+    func aSessionReleasedOutOfBandIsReplacedOnTheDsnScope() async throws {
+        let admin = try await open()
+        let db = name("LOST")
+        _ = try await admin.execute("CREATE OR REPLACE DATABASE \(db)")
+        _ = try await admin.execute("CREATE SCHEMA IF NOT EXISTS \(db).S2")
+        let conn = try await open(database: db, schema: "S2")
+        _ = try await conn.execute("SELECT 1")
+        let lost = try #require(await conn.sessionId)
+        #expect(try await TestServer.shared.releaseSession(lost) == 200)
+        let result = try await conn.execute("SELECT CURRENT_DATABASE() AS D, CURRENT_SCHEMA() AS S")
+        #expect(result.rows.first?["D"] == .string(db))
+        #expect(result.rows.first?["S"] == .string("S2"))
+        #expect(await conn.sessionId != lost)
+        await conn.close()
+        _ = try await admin.execute("DROP DATABASE \(db)")
+        await admin.close()
+    }
+
+    @Test(.enabled("engine cannot report a lost session", { await TestServer.shared.reportsNewSession() }))
+    func aSessionLostWithBeginOpenIsReportedAndNothingIsRerun() async throws {
+        let conn = try await open()
+        let t = name("LOST_TXN")
+        _ = try await conn.execute("CREATE OR REPLACE TABLE \(t) (I INT)")
+        _ = try await conn.execute("BEGIN")
+        _ = try await conn.execute("INSERT INTO \(t) VALUES (1)")
+        #expect(try await TestServer.shared.releaseSession(try #require(await conn.sessionId)) == 200)
+        do {
+            _ = try await conn.execute("INSERT INTO \(t) VALUES (2)")
+            Issue.record("expected FrostlakeError.sessionLost")
+        } catch FrostlakeError.sessionLost(let message) {
+            #expect(message.contains("transaction"))
+        }
+        // A fresh session: the release rolled the first INSERT back, and the second never ran.
+        let count = try await conn.execute("SELECT COUNT(*) AS C FROM \(t)")
+        #expect(count.rows.first?["C"] == .int(0))
+        _ = try await conn.execute("DROP TABLE \(t)")
+        await conn.close()
+    }
+
+    @Test(.enabled("engine has no session release", { await TestServer.shared.reportsNewSession() }))
+    func closingReleasesTheSession() async throws {
+        let before = try await TestServer.shared.activeSessions()
+        let conn = try await open()
+        _ = try await conn.execute("SELECT 1")
+        #expect(try await TestServer.shared.activeSessions() == before + 1)
+        await conn.close()
+        #expect(try await TestServer.shared.activeSessions() == before)
     }
 }

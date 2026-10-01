@@ -58,7 +58,7 @@ enum Substitution {
         return out
     }
 
-    private static func skipString(_ s: [Character], from start: Int) -> Int {
+    static func skipString(_ s: [Character], from start: Int) -> Int {
         var j = start + 1
         while j < s.count {
             if s[j] == "\\" {
@@ -72,7 +72,7 @@ enum Substitution {
         return min(j, s.count)
     }
 
-    private static func skipQuoted(_ s: [Character], from start: Int) -> Int {
+    static func skipQuoted(_ s: [Character], from start: Int) -> Int {
         var j = start + 1
         while j < s.count {
             if s[j] == "\"" {
@@ -87,7 +87,7 @@ enum Substitution {
         return j
     }
 
-    private static func skipLine(_ s: [Character], from start: Int) -> Int {
+    static func skipLine(_ s: [Character], from start: Int) -> Int {
         var j = start
         while j < s.count {
             if s[j] == "\n" { return j + 1 }
@@ -96,7 +96,7 @@ enum Substitution {
         return j
     }
 
-    private static func find(_ s: [Character], _ a: Character, _ b: Character, from start: Int) -> Int? {
+    static func find(_ s: [Character], _ a: Character, _ b: Character, from start: Int) -> Int? {
         var j = start
         while j + 1 < s.count {
             if s[j] == a, s[j + 1] == b { return j }
