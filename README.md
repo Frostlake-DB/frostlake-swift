@@ -26,7 +26,7 @@ for row in result.rows {
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/Frostlake-DB/frostlake-swift.git", from: "0.1.0"),
+    .package(url: "https://github.com/Frostlake-DB/frostlake-swift.git", from: "0.2.0"),
 ],
 targets: [
     .target(name: "MyApp", dependencies: [.product(name: "Frostlake", package: "frostlake-swift")]),
@@ -176,7 +176,7 @@ FROSTLAKE_URL=frostlake://localhost:18082 swift test
 FROSTLAKE_CLASSPATH="$(scripts/engine-classpath.sh)" swift test
 ```
 
-The integration suite is verified against engine 0.0.7 and 0.1.0.
+The integration suite is verified against engine 0.2.0.
 
 `FL_CORPUS=/path/to/frostlake/engine/src/test/resources/testkit swift test` also replays the
 engine's language-neutral test corpus (its `suites/*.json`) through the driver, against the engine

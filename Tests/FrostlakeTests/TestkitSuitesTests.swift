@@ -7,7 +7,7 @@
 // engine side are picked up here with no driver change.
 //
 //   export FL_CORPUS=/path/to/frostlake/engine/src/test/resources/testkit
-//   FROSTLAKE_CLASSPATH="$(scripts/engine-classpath.sh 0.1.0)" swift test --filter TestkitSuitesTests
+//   FROSTLAKE_CLASSPATH="$(scripts/engine-classpath.sh 0.2.0)" swift test --filter TestkitSuitesTests
 //   FROSTLAKE_URL=frostlake://localhost:18082 swift test --filter TestkitSuitesTests
 //
 // FL_CORPUS names the testkit directory whose suites/*.json replay (a relative path resolves
