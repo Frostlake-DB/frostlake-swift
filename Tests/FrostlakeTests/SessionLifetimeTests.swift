@@ -358,6 +358,8 @@ import Testing
         "CREATE LOCAL VOLATILE TABLE t (a INT)",
         "CREATE OR REPLACE SECURE TEMPORARY VIEW v AS SELECT 1",
         "-- note\nCREATE TEMP TABLE t (a INT)",
+        "-- note\rCREATE TEMP TABLE t (a INT)",
+        "-- note\r\nCREATE TEMP TABLE t (a INT)",
     ])
     func statementsThatLeaveStateOnTheSession(_ statement: String) {
         #expect(SessionText.touchesSession(statement))
@@ -393,5 +395,8 @@ import Testing
         #expect(SessionText.statements("SELECT 1; USE SCHEMA s") == ["SELECT 1", " USE SCHEMA s"])
         #expect(SessionText.statements("SELECT 'a;b'; ") == ["SELECT 'a;b'"])
         #expect(SessionText.statements("SELECT $$a;b$$ -- c;d\n") == ["SELECT $$a;b$$ -- c;d\n"])
+        // A name is read whole, and a line comment ends at a carriage return, as the lexer reads them.
+        #expect(SessionText.statements("SELECT 1 AS a$$b; USE SCHEMA s") == ["SELECT 1 AS a$$b", " USE SCHEMA s"])
+        #expect(SessionText.statements("SELECT 1 -- c\r; USE SCHEMA s") == ["SELECT 1 -- c\r", " USE SCHEMA s"])
     }
 }

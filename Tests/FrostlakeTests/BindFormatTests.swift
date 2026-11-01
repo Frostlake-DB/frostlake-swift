@@ -8,7 +8,7 @@ import Testing
         #expect(try FrostlakeBind.null.literal() == "NULL")
         #expect(try FrostlakeBind.bool(true).literal() == "true")
         #expect(try FrostlakeBind.bool(false).literal() == "false")
-        #expect(try FrostlakeBind.int(-42).literal() == "-42")
+        #expect(try FrostlakeBind.int(-42).literal() == "(-42)")
         #expect(try FrostlakeBind.double(2.5).literal() == "2.5")
         #expect(try FrostlakeBind.decimal(Decimal(string: "1234.5678")!).literal() == "1234.5678")
     }

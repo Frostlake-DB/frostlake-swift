@@ -135,6 +135,9 @@ enum SessionText {
     private static func skipNonCode(_ chars: [Character], at i: Int) -> Int? {
         let next: Character? = i + 1 < chars.count ? chars[i + 1] : nil
         switch chars[i] {
+        case let c where Substitution.isNameStart(c):
+            // A name holds no separator, and the $$ inside one opens no body.
+            return Substitution.skipName(chars, from: i)
         case "'":
             return Substitution.skipString(chars, from: i)
         case "\"":

@@ -26,7 +26,7 @@ for row in result.rows {
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/Frostlake-DB/frostlake-swift.git", from: "0.2.0"),
+    .package(url: "https://github.com/Frostlake-DB/frostlake-swift.git", from: "0.2.1"),
 ],
 targets: [
     .target(name: "MyApp", dependencies: [.product(name: "Frostlake", package: "frostlake-swift")]),

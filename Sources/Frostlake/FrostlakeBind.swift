@@ -26,12 +26,12 @@ public enum FrostlakeBind: Sendable, Equatable {
         case .bool(let v):
             return v ? "true" : "false"
         case .int(let v):
-            return "\(v)"
+            return Self.number("\(v)")
         case .double(let v):
             guard v.isFinite else { throw FrostlakeError.binds("non-finite number \(v)") }
-            return "\(v)"
+            return Self.number("\(v)")
         case .decimal(let v):
-            return "\(v)"
+            return Self.number("\(v)")
         case .string(let v):
             let escaped = v.replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "'", with: "''")
@@ -50,6 +50,13 @@ public enum FrostlakeBind: Sendable, Equatable {
             }
             return "[" + parts.joined(separator: ", ") + "]"
         }
+    }
+
+    /// A negative number goes in parentheses, which is one value wherever it
+    /// lands: bare, 3-? would become 3--5, a line comment, and ?::VARCHAR would
+    /// cast before it negates. The rendered text decides, so -0.0 is wrapped too.
+    private static func number(_ text: String) -> String {
+        text.hasPrefix("-") ? "(\(text))" : text
     }
 }
 

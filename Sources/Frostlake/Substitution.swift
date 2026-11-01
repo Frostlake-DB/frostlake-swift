@@ -3,7 +3,8 @@
 /// doubling), double-quoted identifiers, `--` and `//` line comments, /* */
 /// block comments, and $$…$$ dollar-quoted strings (non-greedy to the next $$,
 /// like the lexer's DOLLAR_QUOTED_STRING rule), so a ? inside any of them is
-/// never a placeholder. Unterminated constructs run to the end of the text.
+/// never a placeholder. A name is read whole, as the lexer reads one, so the $$
+/// inside a$$b opens no body. Unterminated constructs run to the end of the text.
 enum Substitution {
 
     static func substitute(_ sql: String, binds: [FrostlakeBind]) throws -> String {
@@ -32,6 +33,11 @@ enum Substitution {
                 i = j
             } else if ch == "/", i + 1 < chars.count, chars[i + 1] == "/" {
                 let j = skipLine(chars, from: i)
+                out += String(chars[i..<j])
+                i = j
+            } else if isNameStart(ch) {
+                // a name is read whole, as the lexer reads one: the $$ in a$$b opens no dollar-quoted body
+                let j = skipName(chars, from: i)
                 out += String(chars[i..<j])
                 i = j
             } else if ch == "$", i + 1 < chars.count, chars[i + 1] == "$" {
@@ -87,10 +93,28 @@ enum Substitution {
         return j
     }
 
+    /// A line comment ends at a line feed or a carriage return, whichever comes
+    /// first, as the lexer's LINE_COMMENT does: ('--' | '//') ~[\r\n]*. Swift
+    /// reads a CR LF pair as one Character, so that pair ends it too.
     static func skipLine(_ s: [Character], from start: Int) -> Int {
         var j = start
         while j < s.count {
-            if s[j] == "\n" { return j + 1 }
+            if s[j] == "\n" || s[j] == "\r" || s[j] == "\r\n" { return j + 1 }
+            j += 1
+        }
+        return j
+    }
+
+    /// Whether a name starts here, as the lexer's IDENTIFIER does: [a-zA-Z_].
+    static func isNameStart(_ c: Character) -> Bool {
+        c.isASCII && (c.isLetter || c == "_")
+    }
+
+    /// The end of the name that starts at `start`, read as the lexer reads an
+    /// IDENTIFIER: [a-zA-Z_][a-zA-Z0-9_$]*.
+    static func skipName(_ s: [Character], from start: Int) -> Int {
+        var j = start + 1
+        while j < s.count, s[j].isASCII, s[j].isLetter || s[j].isNumber || s[j] == "_" || s[j] == "$" {
             j += 1
         }
         return j
